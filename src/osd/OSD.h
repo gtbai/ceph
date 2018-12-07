@@ -1532,17 +1532,34 @@ private:
     }
 
   };
+
+
+  // -- heartbeat --  added by guangtong
+  /// information about a heartbeat peer
+  struct P2PPingInfo {
+      int peer;           ///< peer
+      ConnectionRef con_front;   ///< peer connection (front)
+      ConnectionRef con_back;    ///< peer connection (back)
+      utime_t sent_time;    ///< last time we sent a ping request
+      utime_t received_front_time;  ///< last time we got a ping reply on the front side
+      utime_t received_back_time;   ///< last time we got a ping reply on the back side
+//      epoch_t epoch;      ///< most recent epoch we wanted this peer
+  };
+
   /// state attached to outgoing heartbeat connections
   struct HeartbeatSession : public RefCountedObject {
     int peer;
     explicit HeartbeatSession(int p) : peer(p) {}
   };
   Mutex heartbeat_lock;
+  Mutex p2p_ping_lock;
   map<int, int> debug_heartbeat_drops_remaining;
   Cond heartbeat_cond;
   bool heartbeat_stop;
   std::atomic<bool> heartbeat_need_update;   
   map<int,HeartbeatInfo> heartbeat_peers;  ///< map of osd id to HeartbeatInfo
+//  map<int,P2PPingInfo> p2p_ping_peers;  ///< map of osd id to P2PPingInfo
+  pair<int, P2PPingInfo> p2p_ping_pair; // pair of osd id to P2PPingInfo
   utime_t last_mon_heartbeat;
   Messenger *hb_front_client_messenger;
   Messenger *hb_back_client_messenger;
@@ -1550,7 +1567,10 @@ private:
   Messenger *hb_back_server_messenger;
   utime_t last_heartbeat_resample;   ///< last time we chose random peers in waiting-for-healthy state
   double daily_loadavg;
-  
+
+  // =====739proj=====
+  std::string OSD::p2p_ping_peer(int p);
+  bool OSD::p2p_ping_check();
   void _add_heartbeat_peer(int p);
   void _remove_heartbeat_peer(int p);
   bool heartbeat_reset(Connection *con);

@@ -45,6 +45,8 @@ class MOSDPing : public Message {
     STOP_HEARTBEAT = 3,
     PING = 4,
     PING_REPLY = 5,
+    P2P_PING = 6,
+    P2P_PING_REPLY = 7,
   };
   const char *get_op_name(int op) const {
     switch (op) {
@@ -54,6 +56,8 @@ class MOSDPing : public Message {
     case YOU_DIED: return "you_died";
     case PING: return "ping";
     case PING_REPLY: return "ping_reply";
+    case P2P_PING: return "p2p_ping";
+    case P2P_PING_REPLY: return "p2p_ping_reply";
     default: return "???";
     }
   }
