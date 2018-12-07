@@ -1911,6 +1911,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   session_waiting_lock("OSD::session_waiting_lock"),
   osdmap_subscribe_lock("OSD::osdmap_subscribe_lock"),
   heartbeat_lock("OSD::heartbeat_lock"),
+  p2p_ping_lock("OSD::p2p_ping_lock"),
   heartbeat_stop(false),
   heartbeat_need_update(true),
   hb_front_client_messenger(hb_client_front),
@@ -4291,7 +4292,44 @@ bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
   return true;
 }
 
+// ======739proj======
+std::string OSD::p2p_ping_peer(int p) {
+  if (p == whoami)
+    return "No sense to ping a OSD itself!";
+  Mutex::Locker l(p2p_ping_lock);
+  P2PPingInfo *pi = new P2PPingInfo{p, NULL, NULL, utime_t(), utime_t(), utime_t()};
+  p2p_ping_pair.first = p;
+  p2p_ping_pair.second = *pi;
+  pair <ConnectionRef, ConnectionRef> cons = service.get_con_osd_hb(p, osdmap->get_epoch());
+  if (!cons.first)
+    return "Cannot establish a back connection to the peer OSD";
+  utime_t now = ceph_clock_now();
+  Message *m = new MOSDPing(monc->get_fsid(),
+                            service.get_osdmap_epoch(),
+                            MOSDPing::P2P_PING, now,
+                            cct->_conf->osd_heartbeat_min_size);
+  pi->con_back = cons.first.get();
+  pi->con_back->send_message(m);
+  // contruct and send ping message
+  if (cons.second) {
+    pi->con_front = cons.second.get();
+    pi->con_front->send_message(m);
+  } else {
+    pi->con_front.reset(NULL);
+  }
+  // update last send time
+  pi->sent_time = now;
+  // wait for response
+  nanosleep((const struct timespec[]){{0, long(1e8L)}}, NULL);
+  for (int i = 0; i <= 10; i++) {
+    if (p2p_ping_check()) {
+      return "ping succeeded!!! : )";
+    }
+    nanosleep((const struct timespec[]){{1, 0}}, NULL);
+  }
 
+  return "ping failed... : (";
+}
 
 void OSD::_add_heartbeat_peer(int p)
 {
@@ -4615,9 +4653,79 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	     << " says i am down in " << m->map_epoch << dendl;
     osdmap_subscribe(curmap->get_epoch()+1, false);
     break;
-  }
 
-  heartbeat_lock.Unlock();
+  // =====739proj=====
+
+  case MOSDPing::P2P_PING: {
+    Message *r = new MOSDPing(monc->get_fsid(),
+                              curmap->get_epoch(),
+                              MOSDPing::P2P_PING_REPLY, m->stamp,
+                              cct->_conf->osd_heartbeat_min_size);
+    m->get_connection()->send_message(r);
+  }
+  break;
+
+  case MOSDPing::P2P_PING_REPLY: {
+//      int peer = p2p_ping_pair.first;
+    P2PPingInfo *pi = &p2p_ping_pair.second;
+    ceph_assert(p2p_ping_pair.first == from);
+    if (m->get_connection() == pi->con_back) {
+      dout(25) << "handle_osd_ping got p2p ping reply from osd." << from
+               << " sent_time" << pi->sent_time
+               << " received_back_time " << pi->received_back_time << " -> " << m->stamp
+               << " received_front_time " << pi->received_front_time
+               << dendl;
+      pi->received_back_time = m->stamp;
+      // if there is no front con, set both stamps.
+      if (pi->con_front == NULL)
+        pi->received_front_time = m->stamp;
+    } else if (m->get_connection() == pi->con_front) {
+      dout(25) << " \"handle_osd_ping got p2p ping reply from osd." << from
+               << " sent_time" << pi->sent_time
+               << " received_back_time " << pi->received_back_time
+               << " received_front_time " << pi->received_front_time << " -> " << m->stamp
+               << dendl;
+      pi->received_front_time = m->stamp;
+    }
+    // TODO: cancelling false reports
+//        utime_t cutoff = ceph_clock_now();
+//        cutoff -= cct->_conf->osd_heartbeat_grace;
+//        if (i->second.is_healthy(cutoff)) {
+//          // Cancel false reports
+//          auto failure_queue_entry = failure_queue.find(from);
+//          if (failure_queue_entry != failure_queue.end()) {
+//            dout(10) << "handle_osd_ping canceling queued "
+//                     << "failure report for osd." << from << dendl;
+//            failure_queue.erase(failure_queue_entry);
+//          }
+//
+//          auto failure_pending_entry = failure_pending.find(from);
+//          if (failure_pending_entry != failure_pending.end()) {
+//            dout(10) << "handle_osd_ping canceling in-flight "
+//                     << "failure report for osd." << from << dendl;
+//            send_still_alive(curmap->get_epoch(),
+//                             failure_pending_entry->second.second);
+//            failure_pending.erase(failure_pending_entry);
+//          }
+//        }
+//      if (m->map_epoch &&
+//          curmap->is_up(from)) {
+//        service.note_peer_epoch(from, m->map_epoch);
+//        if (is_active()) {
+//          ConnectionRef con = service.get_con_osd_cluster(from, curmap->get_epoch());
+//          if (con) {
+//            service.share_map_peer(from, con.get());
+//          }
+//        }
+//      }
+  }
+  break;
+
+
+}
+
+
+heartbeat_lock.Unlock();
   m->put();
 }
 
@@ -4638,6 +4746,50 @@ void OSD::heartbeat_entry()
       return;
     dout(30) << "heartbeat_entry woke up" << dendl;
   }
+}
+
+bool OSD::p2p_ping_check() {
+  Mutex::Locker l(p2p_ping_lock);
+
+  int peer = p2p_ping_pair.first;
+  P2PPingInfo *pi = &p2p_ping_pair.second;
+
+  if (pi->sent_time == utime_t()) {
+    dout(25) << "we haven't pinged any peer osd "
+             << "yet, skipping" << dendl;
+    return false;
+  }
+
+  dout(25) << "p2p_ping_check osd." << peer
+           << " sent_time " << pi->sent_time
+           << " received_back_time " << pi->received_back_time
+           << " received_front_time " << pi->received_front_time
+           << dendl;
+
+  if (pi->received_back_time == utime_t() || pi->received_front_time == utime_t()) {
+    return false;
+  }
+
+  return true;
+
+//    if (p->second.is_unhealthy(cutoff)) {
+//      if (p->second.last_rx_back == utime_t() ||
+//          p->second.last_rx_front == utime_t()) {
+//        derr << "heartbeat_check: no reply from " << p->second.con_front->get_peer_addr().get_sockaddr()
+//             << " osd." << p->first << " ever on either front or back, first ping sent "
+//             << p->second.first_tx << " (cutoff " << cutoff << ")" << dendl;
+//        // fail
+//        failure_queue[p->first] = p->second.last_tx;
+//      } else {
+//        derr << "heartbeat_check: no reply from " << p->second.con_front->get_peer_addr().get_sockaddr()
+//             << " osd." << p->first << " since back " << p->second.last_rx_back
+//             << " front " << p->second.last_rx_front
+//             << " (cutoff " << cutoff << ")" << dendl;
+//        // fail
+//        failure_queue[p->first] = std::min(p->second.last_rx_back, p->second.last_rx_front);
+//      }
+//    }
+//  }
 }
 
 void OSD::heartbeat_check()
@@ -5711,6 +5863,10 @@ COMMAND("perf histogram dump "
 	"osd", "r", "cli,rest")
 
 // tell <osd.n> commands.  Validation of osd.n must be special-cased in client
+COMMAND("p2p_ping " \
+  "name=peer,type=CephString",
+        "Ping a peer",
+        "osd", "r", "cli,rest")
 COMMAND("version", "report version of OSD", "osd", "r", "cli,rest")
 COMMAND("get_command_descriptions", "list commands descriptions", "osd", "r", "cli,rest")
 COMMAND("injectargs " \
