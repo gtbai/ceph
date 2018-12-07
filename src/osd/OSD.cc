@@ -4294,13 +4294,16 @@ bool OSD::project_pg_history(spg_t pgid, pg_history_t& h, epoch_t from,
 
 // ======739proj======
 std::string OSD::p2p_ping_peer(int p) {
+  dout(0) << "cs739proj log 1: entered p2p_ping_peer" << dendl;
   if (p == whoami)
     return "No sense to ping a OSD itself!";
   Mutex::Locker l(p2p_ping_lock);
+  dout(0) << "cs739proj log 2: grabbed p2p_ping_lock" << dendl;
   P2PPingInfo *pi = new P2PPingInfo{p, NULL, NULL, utime_t(), utime_t(), utime_t()};
   p2p_ping_pair.first = p;
   p2p_ping_pair.second = *pi;
   pair <ConnectionRef, ConnectionRef> cons = service.get_con_osd_hb(p, osdmap->get_epoch());
+  dout(0) << "cs739proj log 3: built connections" << dendl;
   if (!cons.first)
     return "Cannot establish a back connection to the peer OSD";
   utime_t now = ceph_clock_now();
@@ -4310,6 +4313,7 @@ std::string OSD::p2p_ping_peer(int p) {
                             cct->_conf->osd_heartbeat_min_size);
   pi->con_back = cons.first.get();
   pi->con_back->send_message(m);
+  dout(0) << "cs739proj log 4: sent message to back" << dendl;
   // contruct and send ping message
   if (cons.second) {
     pi->con_front = cons.second.get();
@@ -4317,11 +4321,13 @@ std::string OSD::p2p_ping_peer(int p) {
   } else {
     pi->con_front.reset(NULL);
   }
+  dout(0) << "cs739proj log 5: sent message to front" << dendl;
   // update last send time
   pi->sent_time = now;
   // wait for response
   nanosleep((const struct timespec[]){{0, long(1e8L)}}, NULL);
   for (int i = 0; i <= 10; i++) {
+    dout(0) << "cs739proj log 6: waiting for p2p ping reply@" << i << dendl;
     if (p2p_ping_check()) {
       return "ping succeeded!!! : )";
     }
@@ -5975,7 +5981,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   cmd_getval(cct, cmdmap, "format", format);
   f.reset(Formatter::create(format));
 
-  
+  // =====739proj=====
   if (prefix == "p2p_ping") {
 //    if (f) {
 //      f->open_object_section("p2p_ping");
@@ -5986,6 +5992,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
 //    } else {
 //      ds << pretty_version_to_str();
 //    }
+    dout(0) << "cs739proj log 0: matched prefix" << dendl;
     std::string peer;
     // peer -> osd.xx
     cmd_getval(cct, cmdmap, "peer", peer);
