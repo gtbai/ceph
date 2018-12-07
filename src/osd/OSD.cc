@@ -5975,7 +5975,23 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   cmd_getval(cct, cmdmap, "format", format);
   f.reset(Formatter::create(format));
 
-  if (prefix == "version") {
+  
+  if (prefix == "p2p_ping") {
+//    if (f) {
+//      f->open_object_section("p2p_ping");
+//      // f->dump_string("p2p_ping", "SURPRISE MOTHERFUCKER!");
+//      f->dump_string("p2p_ping", p2p_ping_peers());
+//      f->close_section();
+//      f->flush(ds);
+//    } else {
+//      ds << pretty_version_to_str();
+//    }
+    std::string peer;
+    // peer -> osd.xx
+    cmd_getval(cct, cmdmap, "peer", peer);
+    ss << p2p_ping_peer(std::stoi(peer.substr(4)));
+    goto out;
+  } else if (prefix == "version") {
     if (f) {
       f->open_object_section("version");
       f->dump_string("version", pretty_version_to_str());
