@@ -4755,8 +4755,6 @@ void OSD::heartbeat_entry()
 }
 
 bool OSD::p2p_ping_check() {
-  Mutex::Locker l(p2p_ping_lock);
-
   int peer = p2p_ping_pair.first;
   P2PPingInfo *pi = &p2p_ping_pair.second;
 
