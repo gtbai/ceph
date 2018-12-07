@@ -1569,8 +1569,8 @@ private:
   double daily_loadavg;
 
   // =====739proj=====
-  std::string OSD::p2p_ping_peer(int p);
-  bool OSD::p2p_ping_check();
+  std::string p2p_ping_peer(int p);
+  bool p2p_ping_check();
   void _add_heartbeat_peer(int p);
   void _remove_heartbeat_peer(int p);
   bool heartbeat_reset(Connection *con);
