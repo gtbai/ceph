@@ -1835,6 +1835,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
         session_waiting_lock("OSD::session_waiting_lock"),
         osdmap_subscribe_lock("OSD::osdmap_subscribe_lock"),
         heartbeat_lock("OSD::heartbeat_lock"),
+        p2p_ping_lock("OSD::p2p_ping_lock"),
         heartbeat_stop(false),
         heartbeat_need_update(true),
         hb_front_client_messenger(hb_client_front),
@@ -4203,7 +4204,7 @@ std::string OSD::p2p_ping_peer(int p) {
   p2p_ping_pair.second = *pi;
   pair <ConnectionRef, ConnectionRef> cons = service.get_con_osd_hb(p, osdmap->get_epoch());
   if (!cons.first)
-    return;
+    return "Cannot establish a back connection to the peer OSD";
   utime_t now = ceph_clock_now();
   Message *m = new MOSDPing(monc->get_fsid(),
                             service.get_osdmap_epoch(),
