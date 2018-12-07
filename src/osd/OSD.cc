@@ -4196,17 +4196,18 @@ bool OSD::project_pg_history(spg_t pgid, pg_history_t &h, epoch_t from,
 // ======739proj======
 std::string OSD::p2p_ping_peer(int p) {
   if (p == whoami)
-    return;
+    return "No sense to ping a OSD itself!";
   Mutex::Locker l(p2p_ping_lock);
-  P2PPingInfo *pi = new P2PPingInfo(p, NULL, NULL, utime_t(), utime_t(), utime_t());
+  P2PPingInfo *pi = new P2PPingInfo{p, NULL, NULL, utime_t(), utime_t(), utime_t()};
   p2p_ping_pair.first = p;
   p2p_ping_pair.second = *pi;
   pair <ConnectionRef, ConnectionRef> cons = service.get_con_osd_hb(p, osdmap->get_epoch());
   if (!cons.first)
     return;
+  utime_t now = ceph_clock_now();
   Message *m = new MOSDPing(monc->get_fsid(),
-                            curmap->get_epoch(),
-                            MOSDPing::P2P_PING, m->stamp,
+                            service.get_osdmap_epoch(),
+                            MOSDPing::P2P_PING, now,
                             cct->_conf->osd_heartbeat_min_size);
   pi->con_back = cons.first.get();
   pi->con_back->send_message(m);
@@ -4218,9 +4219,9 @@ std::string OSD::p2p_ping_peer(int p) {
     pi->con_front.reset(NULL);
   }
   // update last send time
-  pi->sent_time = ceph_clock_now();
+  pi->sent_time = now;
   // wait for response
-  nanosleep((const struct timespec[]){{0, 1e8L}}, NULL);
+  nanosleep((const struct timespec[]){{0, long(1e8L)}}, NULL);
   for (int i = 0; i <= 10; i++) {
     if (p2p_ping_check()) {
       return "ping succeeded!!! : )";
@@ -4548,37 +4549,38 @@ void OSD::handle_osd_ping(MOSDPing *m) {
 
       // =====739proj=====
 
-    case MOSDPing::P2P_PING:
+    case MOSDPing::P2P_PING: {
       Message *r = new MOSDPing(monc->get_fsid(),
                                 curmap->get_epoch(),
                                 MOSDPing::P2P_PING_REPLY, m->stamp,
                                 cct->_conf->osd_heartbeat_min_size);
       m->get_connection()->send_message(r);
+    }
       break;
 
-    case MOSDPing::P2P_PING_REPLY:
-      int peer = p2p_ping_pair.fist;
+    case MOSDPing::P2P_PING_REPLY: {
+//      int peer = p2p_ping_pair.first;
       P2PPingInfo *pi = &p2p_ping_pair.second;
       ceph_assert(p2p_ping_pair.first == from);
-        if (m->get_connection() == pi->con_back) {
-          dout(25) << "handle_osd_ping got p2p ping reply from osd." << from
-                   << " sent_time" << pi->sent_time
-                  << " received_back_time " << pi->received_back_time << " -> " << m->stamp
-                  << " received_front_time " << pi->received_front_time
-                  << dendl;
-          pi->received_back_time = m->stamp;
-          // if there is no front con, set both stamps.
-          if (pi->con_front == NULL)
-            pi->received_front_time = m->stamp;
-        } else if (m->get_connection() == pi->con_front) {
-          dout(25) << " \"handle_osd_ping got p2p ping reply from osd." << from
-                  << " sent_time" << pi->sent_time
-                  << " received_back_time " << pi->received_back_time
-                  << " received_front_time " << pi->received_front_time << " -> " << m->stamp
-                  << dendl;
+      if (m->get_connection() == pi->con_back) {
+        dout(25) << "handle_osd_ping got p2p ping reply from osd." << from
+                 << " sent_time" << pi->sent_time
+                 << " received_back_time " << pi->received_back_time << " -> " << m->stamp
+                 << " received_front_time " << pi->received_front_time
+                 << dendl;
+        pi->received_back_time = m->stamp;
+        // if there is no front con, set both stamps.
+        if (pi->con_front == NULL)
           pi->received_front_time = m->stamp;
-        }
-        // TODO: cancelling false reports
+      } else if (m->get_connection() == pi->con_front) {
+        dout(25) << " \"handle_osd_ping got p2p ping reply from osd." << from
+                 << " sent_time" << pi->sent_time
+                 << " received_back_time " << pi->received_back_time
+                 << " received_front_time " << pi->received_front_time << " -> " << m->stamp
+                 << dendl;
+        pi->received_front_time = m->stamp;
+      }
+      // TODO: cancelling false reports
 //        utime_t cutoff = ceph_clock_now();
 //        cutoff -= cct->_conf->osd_heartbeat_grace;
 //        if (i->second.is_healthy(cutoff)) {
@@ -4609,6 +4611,7 @@ void OSD::handle_osd_ping(MOSDPing *m) {
 //          }
 //        }
 //      }
+    }
       break;
 
 
@@ -4688,7 +4691,7 @@ bool OSD::p2p_ping_check() {
   P2PPingInfo *pi = &p2p_ping_pair.second;
 
   if (pi->sent_time == utime_t()) {
-    dout(25) << "we haven't pinged any peer osd." << p->first
+    dout(25) << "we haven't pinged any peer osd "
              << "yet, skipping" << dendl;
     return false;
   }
