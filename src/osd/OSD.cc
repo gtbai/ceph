@@ -4318,10 +4318,10 @@ std::string OSD::p2p_ping_peer(int p) {
   if (cons.second) {
     pi->con_front = cons.second.get();
     pi->con_front->send_message(m);
+    dout(0) << "cs739proj log 5: sent message to front" << dendl;
   } else {
     pi->con_front.reset(NULL);
   }
-  dout(0) << "cs739proj log 5: sent message to front" << dendl;
   // update last send time
   pi->sent_time = now;
   // wait for response
@@ -4696,6 +4696,18 @@ void OSD::handle_osd_ping(MOSDPing *m)
                << dendl;
       pi->received_front_time = m->stamp;
     }
+    else {
+      dout(0) << "cs739proj log 10: connect is neither front nor back" << dendl;
+      if(!pi->con_front){
+        dout(0) << "cs739proj log 11: pi->con_front is null" << dendl;
+      }
+      if(!pi->con_back){
+        dout(0) << "cs739proj log 11: pi->con_back is null" << dendl;
+      }
+      if(!m->get_connection()){
+        dout(0) << "cs739proj log 11: m->get_connection() is null" << dendl;
+      }
+    }
     // TODO: cancelling false reports
 //        utime_t cutoff = ceph_clock_now();
 //        cutoff -= cct->_conf->osd_heartbeat_grace;
@@ -4774,6 +4786,8 @@ bool OSD::p2p_ping_check() {
            << dendl;
 
   if (pi->received_back_time == utime_t() || pi->received_front_time == utime_t()) {
+    dout(0) << "cs739proj log 12: back_time is 0 or front_time is 0" << dendl;
+    
     return false;
   }
 
