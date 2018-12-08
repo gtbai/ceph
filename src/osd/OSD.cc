@@ -4787,13 +4787,10 @@ bool OSD::p2p_ping_check() {
            << dendl;
 
   if (pi->received_back_time == utime_t() || pi->received_front_time == utime_t()) {
-    dout(0) << "cs739proj log 12: back_time is 0 or front_time is 0" << dendl;
-    
+    derr << "cs739proj log 12: no P2P_PING_REPLY received from " 
+         << pi->con_back->get_peer_addr().get_sockaddr() << dendl;
     return false;
   }
-
-  pi->received_back_time = utime_t();
-  pi->received_front_time = utime_t();
   return true;
 
 //    if (p->second.is_unhealthy(cutoff)) {
