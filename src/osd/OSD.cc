@@ -4301,6 +4301,7 @@ std::string OSD::p2p_ping_peer(int p) {
   dout(0) << "cs739proj log 2: grabbed p2p_ping_lock" << dendl;
   p2p_ping_pair.first = p;
   P2PPingInfo *pi = &p2p_ping_pair.second;
+  *pi = {p, NULL, NULL, utime_t(), utime_t(), utime_t()};
   // P2PPingInfo *pi = new P2PPingInfo{p, NULL, NULL, utime_t(), utime_t(), utime_t()};
   pair <ConnectionRef, ConnectionRef> cons = service.get_con_osd_hb(p, osdmap->get_epoch());
   dout(0) << "cs739proj log 3: built connections" << dendl;
@@ -4791,6 +4792,8 @@ bool OSD::p2p_ping_check() {
     return false;
   }
 
+  pi->received_back_time = utime_t();
+  pi->received_front_time = utime_t();
   return true;
 
 //    if (p->second.is_unhealthy(cutoff)) {
