@@ -4299,9 +4299,9 @@ std::string OSD::p2p_ping_peer(int p) {
     return "No sense to ping a OSD itself!";
   Mutex::Locker l(p2p_ping_lock);
   dout(0) << "cs739proj log 2: grabbed p2p_ping_lock" << dendl;
-  P2PPingInfo *pi = new P2PPingInfo{p, NULL, NULL, utime_t(), utime_t(), utime_t()};
   p2p_ping_pair.first = p;
-  p2p_ping_pair.second = *pi;
+  P2PPingInfo *pi = &p2p_ping_pair.second;
+  // P2PPingInfo *pi = new P2PPingInfo{p, NULL, NULL, utime_t(), utime_t(), utime_t()};
   pair <ConnectionRef, ConnectionRef> cons = service.get_con_osd_hb(p, osdmap->get_epoch());
   dout(0) << "cs739proj log 3: built connections" << dendl;
   if (!cons.first)
