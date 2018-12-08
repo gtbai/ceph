@@ -4663,15 +4663,18 @@ void OSD::handle_osd_ping(MOSDPing *m)
   // =====739proj=====
 
   case MOSDPing::P2P_PING: {
+    dout(0) << "cs739proj log 7: received P2P_PING msg" << dendl;
     Message *r = new MOSDPing(monc->get_fsid(),
                               curmap->get_epoch(),
                               MOSDPing::P2P_PING_REPLY, m->stamp,
                               cct->_conf->osd_heartbeat_min_size);
     m->get_connection()->send_message(r);
+    dout(0) << "cs739proj log 8: sent P2P_PING_REPLY msg" << dendl;
   }
   break;
 
   case MOSDPing::P2P_PING_REPLY: {
+    dout(0) << "cs739proj log 9: received P2P_PING_REPLY msg" << dendl;
 //      int peer = p2p_ping_pair.first;
     P2PPingInfo *pi = &p2p_ping_pair.second;
     ceph_assert(p2p_ping_pair.first == from);
@@ -4686,7 +4689,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
       if (pi->con_front == NULL)
         pi->received_front_time = m->stamp;
     } else if (m->get_connection() == pi->con_front) {
-      dout(25) << " \"handle_osd_ping got p2p ping reply from osd." << from
+      dout(25) << " handle_osd_ping got p2p ping reply from osd." << from
                << " sent_time" << pi->sent_time
                << " received_back_time " << pi->received_back_time
                << " received_front_time " << pi->received_front_time << " -> " << m->stamp
