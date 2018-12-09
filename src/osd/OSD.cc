@@ -6011,7 +6011,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     std::string peer;
     // peer -> osd.xx
     cmd_getval(cct, cmdmap, "peer", peer);
-    ss << p2p_ping_peer(std::stoi(peer.substr(4)));
+    ds << p2p_ping_peer(std::stoi(peer.substr(4)));
     goto out;
   } else if (prefix == "version") {
     if (f) {
