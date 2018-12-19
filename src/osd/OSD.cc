@@ -4303,7 +4303,7 @@ std::string OSD::p2p_ping_peer(int p) {
   P2PPingInfo *pi;
   map<int,P2PPingInfo>::iterator i = p2p_ping_peers.find(p);
   if (i == p2p_ping_peers.end()) {
-    pi = &heartbeat_peers[p];
+    pi = &p2p_ping_peers[p];
   } else {
     pi = &i->second;
   }
@@ -4338,7 +4338,7 @@ std::string OSD::p2p_ping_peer(int p) {
   for (int i = 0; i <= 10; i++) {
     dout(0) << "cs739proj log 6: waiting for p2p ping reply@" << i << dendl;
     heartbeat_lock.Lock();
-    if (p2p_ping_check()) {
+    if (p2p_ping_check(p)) {
       heartbeat_lock.Unlock();
       return "ping succeeded!!! : )";
     }
