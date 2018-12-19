@@ -4297,10 +4297,17 @@ std::string OSD::p2p_ping_peer(int p) {
   dout(0) << "cs739proj log 1: entered p2p_ping_peer" << dendl;
   if (p == whoami)
     return "No sense to ping a OSD itself!";
-  Mutex::Locker l(p2p_ping_lock);
+  // Mutex::Locker l(p2p_ping_lock);
+  heartbeat_lock.Lock();
   dout(0) << "cs739proj log 2: grabbed p2p_ping_lock" << dendl;
-  p2p_ping_pair.first = p;
-  P2PPingInfo *pi = &p2p_ping_pair.second;
+
+  P2PPingInfo *pi;
+  map<int,P2PPingInfo>::iterator i = p2p_ping_peers.find(p);
+  if (i == p2p_ping_peers.end()) {
+    pi = &heartbeat_peers[p];
+  } else {
+    pi = &i->second;
+  }
   *pi = {p, NULL, NULL, utime_t(), utime_t(), utime_t()};
   // P2PPingInfo *pi = new P2PPingInfo{p, NULL, NULL, utime_t(), utime_t(), utime_t()};
   pair <ConnectionRef, ConnectionRef> cons = service.get_con_osd_hb(p, osdmap->get_epoch());
@@ -4326,12 +4333,16 @@ std::string OSD::p2p_ping_peer(int p) {
   // update last send time
   pi->sent_time = now;
   // wait for response
+  heartbeat_lock.Unlock();
   nanosleep((const struct timespec[]){{0, long(1e8L)}}, NULL);
   for (int i = 0; i <= 10; i++) {
     dout(0) << "cs739proj log 6: waiting for p2p ping reply@" << i << dendl;
+    heartbeat_lock.Lock();
     if (p2p_ping_check()) {
+      heartbeat_lock.Unlock();
       return "ping succeeded!!! : )";
     }
+    heartbeat_lock.Unlock();
     nanosleep((const struct timespec[]){{1, 0}}, NULL);
   }
 
@@ -4677,8 +4688,13 @@ void OSD::handle_osd_ping(MOSDPing *m)
   case MOSDPing::P2P_PING_REPLY: {
     dout(0) << "cs739proj log 9: received P2P_PING_REPLY msg" << dendl;
 //      int peer = p2p_ping_pair.first;
-    P2PPingInfo *pi = &p2p_ping_pair.second;
-    ceph_assert(p2p_ping_pair.first == from);
+    map<int,P2PPingInfo>::iterator i = p2p_ping_peers.find(from);
+    if (i == p2p_ping_peers.end()) {
+      break;
+    }
+
+    P2PPingInfo *pi = &i->second;
+    ceph_assert(i->first == from);
     if (m->get_connection() == pi->con_back) {
       dout(25) << "handle_osd_ping got p2p ping reply from osd." << from
                << " sent_time" << pi->sent_time
@@ -4770,9 +4786,14 @@ void OSD::heartbeat_entry()
   }
 }
 
-bool OSD::p2p_ping_check() {
-  int peer = p2p_ping_pair.first;
-  P2PPingInfo *pi = &p2p_ping_pair.second;
+bool OSD::p2p_ping_check(int p) {
+  map<int,P2PPingInfo>::iterator i = p2p_ping_peers.find(p);
+  if(i == p2p_ping_peers.end()){
+    return false;
+  }
+
+  int peer = i->first;
+  P2PPingInfo *pi = &i->second;
 
   if (pi->sent_time == utime_t()) {
     dout(25) << "we haven't pinged any peer osd "
