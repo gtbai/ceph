@@ -4298,7 +4298,6 @@ std::string OSD::p2p_ping_peer(int p) {
   if (p == whoami)
     return "No sense to ping a OSD itself!";
   // Mutex::Locker l(p2p_ping_lock);
-  heartbeat_lock.Lock();
   dout(0) << "cs739proj log 2: grabbed p2p_ping_lock" << dendl;
 
   P2PPingInfo *pi;
@@ -4320,6 +4319,7 @@ std::string OSD::p2p_ping_peer(int p) {
                             MOSDPing::P2P_PING, now,
                             cct->_conf->osd_heartbeat_min_size);
   pi->con_back = cons.first.get();
+  heartbeat_lock.Lock();
   pi->con_back->send_message(m);
   dout(0) << "cs739proj log 4: sent message to back" << dendl;
   // contruct and send ping message
@@ -4330,10 +4330,10 @@ std::string OSD::p2p_ping_peer(int p) {
   } else {
     pi->con_front.reset(NULL);
   }
+  heartbeat_lock.Unlock();
   // update last send time
   pi->sent_time = now;
   // wait for response
-  heartbeat_lock.Unlock();
   nanosleep((const struct timespec[]){{0, long(1e8L)}}, NULL);
   for (int i = 0; i <= 10; i++) {
     dout(0) << "cs739proj log 6: waiting for p2p ping reply@" << i << dendl;
@@ -4921,6 +4921,7 @@ void OSD::heartbeat()
     if (i->second.first_tx == utime_t())
       i->second.first_tx = now;
     dout(30) << "heartbeat sending ping to osd." << peer << dendl;
+    heartbeat_lock.Lock();
     i->second.con_back->send_message(new MOSDPing(monc->get_fsid(),
 					  service.get_osdmap_epoch(),
 					  MOSDPing::PING, now,
@@ -4931,6 +4932,7 @@ void OSD::heartbeat()
 					     service.get_osdmap_epoch(),
 					     MOSDPing::PING, now,
 					  cct->_conf->osd_heartbeat_min_size));
+    heartbeat_lock.UnLock();
   }
 
   logger->set(l_osd_hb_to, heartbeat_peers.size());
