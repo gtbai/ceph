@@ -4335,7 +4335,7 @@ std::string OSD::p2p_ping_peer(int p) {
   // wait for response
   heartbeat_lock.Unlock();
   nanosleep((const struct timespec[]){{0, long(1e8L)}}, NULL);
-  for (int i = 0; i <= 10; i++) {
+  for (int i = 0; i <= 5; i++) {
     dout(0) << "cs739proj log 6: waiting for p2p ping reply@" << i << dendl;
     heartbeat_lock.Lock();
     if (p2p_ping_check(p)) {
