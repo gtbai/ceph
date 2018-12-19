@@ -1557,7 +1557,7 @@ private:
   bool heartbeat_stop;
   std::atomic<bool> heartbeat_need_update;   
   map<int,HeartbeatInfo> heartbeat_peers;  ///< map of osd id to HeartbeatInfo
-  pair<int, P2PPingInfo> p2p_ping_pair; // pair of osd id to P2PPingInfo
+  map<int, P2PPingInfo> p2p_ping_peers; // pair of osd id to P2PPingInfo
   utime_t last_mon_heartbeat;
   Messenger *hb_front_client_messenger;
   Messenger *hb_back_client_messenger;
@@ -1567,7 +1567,7 @@ private:
   double daily_loadavg;
 
   std::string p2p_ping_peer(int p);
-  bool p2p_ping_check();
+  bool p2p_ping_check(int p);
   void _add_heartbeat_peer(int p);
   void _remove_heartbeat_peer(int p);
   bool heartbeat_reset(Connection *con);
